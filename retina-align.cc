@@ -5,11 +5,16 @@
  *      Author: amyznikov
  */
 
+#ifndef _GNU_SOURCE
+# define _GNU_SOURCE
+#endif
 
+
+#include <stdio.h>
+#include <stdarg.h>
+#include <sys/stat.h>
 #include "retina-align.h"
 #include "debug.h"
-#include <opencv2/xfeatures2d.hpp>
-#include <sys/stat.h>
 
 using namespace cv;
 using namespace std;
@@ -92,6 +97,15 @@ static std::string __extract_path(const std::string & fullpathname)
 }
 
 
+static int __mkdir__(const char * path, mode_t mode)
+{
+#ifdef _WIN32
+  return mkdir(path);
+#else
+  return mkdir(path, mode);
+#endif
+}
+
 static bool __create_path(const std::string & path, mode_t mode = DEFAULT_MKDIR_MODE)
 {
   size_t size;
@@ -105,14 +119,14 @@ static bool __create_path(const std::string & path, mode_t mode = DEFAULT_MKDIR_
   for ( char * p = tmp + 1; *p; p++ ) {
     if ( *p == '/' ) {
       *p = 0;
-      if ( mkdir(tmp, mode) != 0 && errno != EEXIST ) {
+      if ( __mkdir__(tmp, mode) != 0 && errno != EEXIST ) {
         return false;
       }
       *p = '/';
     }
   }
 
-  return mkdir(tmp, mode) == 0 || errno == EEXIST ? true : false;
+  return __mkdir__(tmp, mode) == 0 || errno == EEXIST ? true : false;
 }
 
 static bool __save_image(InputArray _image, const string & fname)
@@ -306,6 +320,8 @@ static void __frangi2D(InputArray _src, Mat & _dst, double sigma, Mat * _mask, b
     const int w = std::max((dst.cols / 5) | 1, (dst.rows / 5) | 1);
     if ( w > 150 ) {
       blur(dst, T, Size(w, w));
+      /* workaround potential division by zero on large saturated areas */
+      add(T, cv::mean(dst).val[0] * 0.5 + 10 * FLT_EPSILON, T);
       divide(dst, T, dst);
     }
   }
